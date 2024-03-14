@@ -55,7 +55,7 @@ typedef struct storage_beat_body
 
 // 命令
 #define CMD_TRACKER_JOIN 10   // 存储服务器向跟踪服务器发送加入包
-#define CMD_TARCKER_BEAT 11   // 存储服务器向跟踪服务器发送心跳包
+#define CMD_TRACKER_BEAT 11   // 存储服务器向跟踪服务器发送心跳包
 #define CMD_TRACKER_SADDRS 12 // 客户机从跟踪服务器获取存储服务器地址列表
 #define CMD_TRACKER_GROUPS 13 // 客户机从跟踪服务器获取组列表
 
