@@ -33,7 +33,7 @@
 */
 #define APPID_SIZE 16   // 应用ID最大字节数
 #define USERID_SIZE 256 // 用户ID最大字节数
-#define FILEID_SIZE     // 文件ID最大字符数
+#define FILEID_SIZE 128    // 文件ID最大字符数
 
 // 存储服务器加入包和心跳包
 typedef struct storage_join_body

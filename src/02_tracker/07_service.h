@@ -10,7 +10,7 @@ public:
     service_c(/* args */);
     // socket流
     // 业务处理
-    bool bussiness(acl::socket_stream *conn, char const *head) const;
+    bool business(acl::socket_stream *conn, char const *head) const;
     ~service_c();
 
 private:

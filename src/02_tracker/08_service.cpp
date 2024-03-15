@@ -3,12 +3,12 @@
 //
 #include <algorithm>
 #include "02_proto.h"
-#include "03_util.h"
+#include "03_utils.h"
 #include "01_globals.h"
 #include "05_db.h"
 #include "07_service.h"
 
-// 业务处理一级函数
+// 业务处理一级函数 service_c
 bool service_c::business(acl::socket_stream *conn, char const *head) const
 {
     // |    包头        |
@@ -151,7 +151,7 @@ bool service_c::beat(acl::socket_stream *conn, long long bodylen) const
         return false;
     }
 
-    // 解析包体 这里不用转换了
+    // 解析包体 这里不用转换了，直接用结构
     storage_beat_body_t *sbb = (storage_beat_body_t *)body;
     // 组名
     char groupname[STORAGE_GROUPNAME_MAX + 1];
@@ -177,7 +177,7 @@ bool service_c::saddrs(acl::socket_stream *conn, long long bodylen) const
 {
     // |包体长度|命令|状态|应用ID|用户ID|文件ID|
     // |    8   |  1 |  1 |  16  |  256 |  128 |
-    // 检查包体长度
+    // 检查包体长度，请求做一些检查
     long long expected = APPID_SIZE + USERID_SIZE + FILEID_SIZE;
     if (bodylen != expected)
     {
@@ -187,7 +187,7 @@ bool service_c::saddrs(acl::socket_stream *conn, long long bodylen) const
     }
 
     // 接收包体
-    char body[bodylen];
+    char body[bodylen]; // 缓冲区
     if (conn->read(body, bodylen) < 0)
     {
         logger_error("read fail: %s, bodylen: %lld, from: %s",
@@ -195,7 +195,7 @@ bool service_c::saddrs(acl::socket_stream *conn, long long bodylen) const
         return false;
     }
 
-    // 解析包体
+    // 解析包体 按长度拷贝
     char appid[APPID_SIZE];
     strcpy(appid, body);
     char userid[USERID_SIZE];
@@ -210,55 +210,50 @@ bool service_c::saddrs(acl::socket_stream *conn, long long bodylen) const
     return true;
 }
 
-// 处理来自客户机的获取组列表请求
+// 处理来自客户机的获取组列表请求 不用json xml
 bool service_c::groups(acl::socket_stream *conn) const
 {
     // 互斥锁加锁
     if ((errno = pthread_mutex_lock(&g_mutex)))
     {
-        logger_error("call pthread_mutex_lock fail: %s",
-                     strerror(errno));
+        logger_error("call pthread_mutex_lock fail: %s", strerror(errno)); // 变成错误串
         return false;
     }
 
     acl::string gps; // 全组字符串
-    gps.format("         COUNT OF GROUPS: %lu\n", g_groups.size());
+    gps.format("COUNT OF GROUPS: %lu\n", g_groups.size());
 
     // 遍历组表中的每一个组
-    for (std::map<std::string, std::list<storage_info_t>>::
-             const_iterator group = g_groups.begin();
-         group != g_groups.end(); ++group)
+    for (std::map<std::string, std::list<storage_info_t>>::const_iterator group = g_groups.begin(); group != g_groups.end(); ++group)
     {
         acl::string grp; // 单组字符串
-        grp.format("               GROUPNAME: %s\n"
-                   "       COUNT OF STORAGES: %lu\n"
+        grp.format("GROUPNAME: %s\n"
+                   "COUNT OF STORAGES: %lu\n"
                    "COUNT OF ACTIVE STORAGES: %s\n",
                    group->first.c_str(),
                    group->second.size(),
-                   "%d");
+                   "%d"); // %d占位符
 
         int act = 0; // 活动存储服务器数
 
         // 遍历该组中的每一台存储服务器
-        for (std::list<storage_info_t>::const_iterator si =
-                 group->second.begin();
-             si != group->second.end(); ++si)
+        for (std::list<storage_info_t>::const_iterator si = group->second.begin(); si != group->second.end(); ++si)
         {
             acl::string stg; // 存储服务器字符串
-            stg.format("                 VERSION: %s\n"
-                       "                HOSTNAME: %s\n"
-                       "                 ADDRESS: %s:%u\n"
-                       "            STARTUP TIME: %s"
-                       "               JOIN TIME: %s"
-                       "               BEAT TIME: %s"
-                       "                  STATUS: ",
+            stg.format("VERSION: %s\n"
+                       "HOSTNAME: %s\n"
+                       "ADDRESS: %s:%u\n"
+                       "STARTUP TIME: %s"
+                       "JOIN TIME: %s"
+                       "BEAT TIME: %s"
+                       "STATUS: ",
                        si->si_version,
                        si->si_hostname,
                        si->si_addr, si->si_port,
                        std::string(ctime(&si->si_stime)).c_str(),
                        std::string(ctime(&si->si_jtime)).c_str(),
                        std::string(ctime(&si->si_btime)).c_str());
-
+            // 添加STATUS
             switch (si->si_status)
             {
             case STORAGE_STATUS_OFFLINE:
@@ -278,10 +273,10 @@ bool service_c::groups(acl::socket_stream *conn) const
 
             grp += stg + "\n";
         }
-
+        // 占位符格式化
         gps += grp.format(grp, act);
     }
-
+    // 全组信息
     gps = gps.left(gps.size() - 1);
 
     // 互斥锁解锁
@@ -291,12 +286,13 @@ bool service_c::groups(acl::socket_stream *conn) const
                      strerror(errno));
         return false;
     }
-
+    // 将gps发送给客户端
     // |包体长度|命令|状态| 组列表 |
     // |    8   |  1 |  1 |包体长度|
     // 构造响应
     long long bodylen = gps.size() + 1;
     long long resplen = HEADLEN + bodylen;
+    // 响应缓冲区
     char resp[resplen] = {};
     llton(bodylen, resp);
     resp[BODYLEN_SIZE] = CMD_TRACKER_REPLY;
@@ -306,8 +302,7 @@ bool service_c::groups(acl::socket_stream *conn) const
     // 发送响应
     if (conn->write(resp, resplen) < 0)
     {
-        logger_error("write fail: %s, resplen: %lld, to: %s",
-                     acl::last_serror(), resplen, conn->get_peer());
+        logger_error("write fail: %s, resplen: %lld, to: %s",acl::last_serror(), resplen, conn->get_peer());
         return false;
     }
 
@@ -327,25 +322,22 @@ int service_c::join(storage_join_t const *sj, char const *saddr) const
         return ERROR;
     }
 
-    // 在组表中查找待加入存储服务器所隶属的组
-    std::map<std::string, std::list<storage_info_t>>::iterator
-        group = g_groups.find(sj->sj_groupname);
+    // 在组表中查找待加入存储服务器所隶属的组 拿组名
+    std::map<std::string, std::list<storage_info_t>>::iterator group = g_groups.find(sj->sj_groupname);
     if (group != g_groups.end())
     { // 若找到该组
         // 遍历该组的存储服务器列表
         std::list<storage_info_t>::iterator si;
-        for (si = group->second.begin();
-             si != group->second.end(); ++si)
-            // 若待加入存储服务器已在该列表中
-            if (!strcmp(si->si_hostname, sj->sj_hostname) &&
-                !strcmp(si->si_addr, saddr))
+        for (si = group->second.begin();si != group->second.end(); ++si)
+            // 若待加入存储服务器已在该列表中 以前做过加入，就更新
+            if (!strcmp(si->si_hostname, sj->sj_hostname) && !strcmp(si->si_addr, saddr))
             {
                 // 更新该列表中的相应记录
-                strcpy(si->si_version, sj->sj_version); // 版本
+                strcpy(si->si_version, sj->sj_version); // 版本 重启服务器会变
                 si->si_port = sj->sj_port;              // 端口号
                 si->si_stime = sj->sj_stime;            // 启动时间
                 si->si_jtime = sj->sj_jtime;            // 加入时间
-                si->si_btime = sj->sj_jtime;            // 心跳时间
+                si->si_btime = sj->sj_jtime;            // 心跳时间 加入 = 心跳
                 si->si_status = STORAGE_STATUS_ONLINE;  // 状态
                 break;
             }
@@ -353,7 +345,7 @@ int service_c::join(storage_join_t const *sj, char const *saddr) const
         if (si == group->second.end())
         {
             // 将待加入存储服务器加入该列表
-            storage_info_t si;
+            storage_info_t si; // si又不是迭代器了
             strcpy(si.si_version, sj->sj_version);   // 版本
             strcpy(si.si_hostname, sj->sj_hostname); // 主机名
             strcpy(si.si_addr, saddr);               // IP地址
@@ -366,8 +358,8 @@ int service_c::join(storage_join_t const *sj, char const *saddr) const
         }
     }
     else
-    { // 若没有该组
-        // 将待加入存储服务器所隶属的组加入组表
+    { // 若没有该组 映射里加一个键
+        // 将待加入存储服务器所隶属的组加入组表 key-空链表
         g_groups[sj->sj_groupname] = std::list<storage_info_t>();
         // 将待加入存储服务器加入该组的存储服务器列表
         storage_info_t si;
@@ -413,14 +405,12 @@ int service_c::beat(char const *groupname, char const *hostname, char const *sad
     { // 若找到该组
         // 遍历该组的存储服务器列表
         std::list<storage_info_t>::iterator si;
-        for (si = group->second.begin();
-             si != group->second.end(); ++si)
+        for (si = group->second.begin();si != group->second.end(); ++si)
             // 若待标记存储服务器已在该列表中
-            if (!strcmp(si->si_hostname, hostname) &&
-                !strcmp(si->si_addr, saddr))
+            if (!strcmp(si->si_hostname, hostname) && !strcmp(si->si_addr, saddr))
             {
                 // 更新该列表中的相应记录
-                si->si_btime = time(NULL);             // 心跳时间
+                si->si_btime = time(NULL);             // 心跳时间 就是此刻时间
                 si->si_status = STORAGE_STATUS_ACTIVE; // 状态
                 break;
             }
