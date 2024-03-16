@@ -5,7 +5,12 @@ c++
 4.ctime是同一块静态局部内存地址，不能多次操作，会覆盖，构造一个匿名string,std::string(ctime(&sj.sj_stime)).c_str(),
 且堆内存中地址不同。在数据区，静态内存
 5.包体解析可以用结构体，也可以按指针长度计算
-
+6.bool service_c::error(acl::socket_stream *conn, short errnumb, char const *format, ...) 
+变长参数表
+va_list ap;
+va_start(ap, format);
+vsnprintf(errdesc, ERROR_DESC_SIZE, format, ap);
+va_end(ap);
 
 
 

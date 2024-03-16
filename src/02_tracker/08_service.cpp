@@ -302,7 +302,7 @@ bool service_c::groups(acl::socket_stream *conn) const
     // 发送响应
     if (conn->write(resp, resplen) < 0)
     {
-        logger_error("write fail: %s, resplen: %lld, to: %s",acl::last_serror(), resplen, conn->get_peer());
+        logger_error("write fail: %s, resplen: %lld, to: %s", acl::last_serror(), resplen, conn->get_peer());
         return false;
     }
 
@@ -328,7 +328,7 @@ int service_c::join(storage_join_t const *sj, char const *saddr) const
     { // 若找到该组
         // 遍历该组的存储服务器列表
         std::list<storage_info_t>::iterator si;
-        for (si = group->second.begin();si != group->second.end(); ++si)
+        for (si = group->second.begin(); si != group->second.end(); ++si)
             // 若待加入存储服务器已在该列表中 以前做过加入，就更新
             if (!strcmp(si->si_hostname, sj->sj_hostname) && !strcmp(si->si_addr, saddr))
             {
@@ -345,7 +345,7 @@ int service_c::join(storage_join_t const *sj, char const *saddr) const
         if (si == group->second.end())
         {
             // 将待加入存储服务器加入该列表
-            storage_info_t si; // si又不是迭代器了
+            storage_info_t si;                       // si又不是迭代器了
             strcpy(si.si_version, sj->sj_version);   // 版本
             strcpy(si.si_hostname, sj->sj_hostname); // 主机名
             strcpy(si.si_addr, saddr);               // IP地址
@@ -405,7 +405,7 @@ int service_c::beat(char const *groupname, char const *hostname, char const *sad
     { // 若找到该组
         // 遍历该组的存储服务器列表
         std::list<storage_info_t>::iterator si;
-        for (si = group->second.begin();si != group->second.end(); ++si)
+        for (si = group->second.begin(); si != group->second.end(); ++si)
             // 若待标记存储服务器已在该列表中
             if (!strcmp(si->si_hostname, hostname) && !strcmp(si->si_addr, saddr))
             {
@@ -450,7 +450,7 @@ int service_c::saddrs(acl::socket_stream *conn, char const *appid, char const *u
         return ERROR;
     }
 
-    // 应用ID是否存在
+    // 应用ID是否存在 配置文件是否存在
     if (std::find(g_appids.begin(), g_appids.end(),
                   appid) == g_appids.end())
     {
@@ -458,7 +458,7 @@ int service_c::saddrs(acl::socket_stream *conn, char const *appid, char const *u
         return ERROR;
     }
 
-    // 根据用户ID获取其对应的组名
+    // 根据用户ID获取其对应的组名 调用下面的函数
     std::string groupname;
     if (group_of_user(appid, userid, groupname) != OK)
     {
@@ -474,26 +474,25 @@ int service_c::saddrs(acl::socket_stream *conn, char const *appid, char const *u
         return ERROR;
     }
 
-    logger("appid: %s, userid: %s, groupname: %s, saddrs: %s",
-           appid, userid, groupname.c_str(), saddrs.c_str());
+    logger("appid: %s, userid: %s, groupname: %s, saddrs: %s", appid, userid, groupname.c_str(), saddrs.c_str());
 
-    // |包体长度|命令|状态|组名|存储服务器地址列表|
+    // |包体长度|命令| 状态 |组名|存储服务器地址列表|
     // |    8   |  1 |  1 |       包体长度        |
     // 构造响应
     long long bodylen = STORAGE_GROUPNAME_MAX + 1 + saddrs.size() + 1;
     long long resplen = HEADLEN + bodylen;
     char resp[resplen] = {};
-    llton(bodylen, resp);
+    llton(bodylen, resp); // 其实这里已经放进去了
     resp[BODYLEN_SIZE] = CMD_TRACKER_REPLY;
     resp[BODYLEN_SIZE + COMMAND_SIZE] = 0;
     strncpy(resp + HEADLEN, groupname.c_str(), STORAGE_GROUPNAME_MAX);
+    // strcpy函数时，应确保源字符串src以'\0'结尾，负责可能会导致复制结果不正确。
     strcpy(resp + HEADLEN + STORAGE_GROUPNAME_MAX + 1, saddrs.c_str());
 
     // 发送响应
     if (conn->write(resp, resplen) < 0)
     {
-        logger_error("write fail: %s, resplen: %lld, to: %s",
-                     acl::last_serror(), resplen, conn->get_peer());
+        logger_error("write fail: %s, resplen: %lld, to: %s", acl::last_serror(), resplen, conn->get_peer());
         return ERROR;
     }
 
@@ -534,7 +533,7 @@ int service_c::group_of_user(char const *appid, char const *userid, std::string 
         srand(time(NULL));
         groupname = groupnames[rand() % groupnames.size()];
 
-        // 设置用户ID和组名的对应关系
+        // 固定，存入数据库，设置用户ID和组名的对应关系
         if (db.set(appid, userid, groupname.c_str()) != OK)
             return ERROR;
     }
@@ -553,33 +552,35 @@ int service_c::saddrs_of_group(char const *groupname, std::string &saddrs) const
         return ERROR;
     }
 
-    int result = OK;
+    int result = OK; // 返回result
 
     // 根据组名在组表中查找特定组
     std::map<std::string, std::list<storage_info_t>>::const_iterator
-        group = g_groups.find(groupname);
+        group = g_groups.find(groupname); // 返回一个迭代器
     if (group != g_groups.end())
     { // 若找到该组
         if (!group->second.empty())
         { // 若该组的存储服务器列表非空
             // 在该组的存储服务器列表中，从随机位置开
             // 始最多抽取三台处于活动状态的存储服务器
+            // 多可用，随机性
             srand(time(NULL));
-            int nsis = group->second.size();
+            int nsis = group->second.size(); // 值是list
             int nrand = rand() % nsis;
-            std::list<storage_info_t>::const_iterator si =
-                group->second.begin();
+            std::list<storage_info_t>::const_iterator si = group->second.begin();
             int nacts = 0;
+            // list不能采取下标访问，用一个数代表位置
+            // 停止条件个数+起始位置
             for (int i = 0; i < nsis + nrand; ++i, ++si)
             {
                 if (si == group->second.end())
+                    // 迭代器复位
                     si = group->second.begin();
                 logger("i: %d, nrand: %d, addr: %s, port: %u, "
                        "status: %d",
                        i, nrand, si->si_addr, si->si_port,
                        si->si_status);
-                if (i >= nrand && si->si_status ==
-                                      STORAGE_STATUS_ACTIVE)
+                if (i >= nrand && si->si_status == STORAGE_STATUS_ACTIVE)
                 {
                     char saddr[256];
                     sprintf(saddr, "%s:%d", si->si_addr, si->si_port);
@@ -590,20 +591,20 @@ int service_c::saddrs_of_group(char const *groupname, std::string &saddrs) const
                 }
             }
             if (!nacts)
-            { // 若没有处于活动状态的存储服务器
+            { // 若没有处于活动状态的存储服务器 v中没有活动状态的存储服务器
                 logger_error("no active storage in group %s",
                              groupname);
                 result = ERROR;
             }
         }
         else
-        { // 若该组的存储服务器列表为空
+        { // 若该组的存储服务器列表为空 v为空
             logger_error("no storage in group %s", groupname);
             result = ERROR;
         }
     }
     else
-    { // 若没有该组
+    { // 若没有该组 没有对应的k-v
         logger_error("not found group %s", groupname);
         result = ERROR;
     }
@@ -637,8 +638,7 @@ bool service_c::ok(acl::socket_stream *conn) const
     // 发送响应
     if (conn->write(resp, resplen) < 0)
     {
-        logger_error("write fail: %s, resplen: %lld, to: %s",
-                     acl::last_serror(), resplen, conn->get_peer());
+        logger_error("write fail: %s, resplen: %lld, to: %s", acl::last_serror(), resplen, conn->get_peer());
         return false;
     }
 
@@ -653,12 +653,12 @@ bool service_c::error(acl::socket_stream *conn, short errnumb, char const *forma
     va_list ap;
     va_start(ap, format);
     vsnprintf(errdesc, ERROR_DESC_SIZE, format, ap);
-    va_end(ap);
+    va_end(ap); // 释放内存
     logger_error("%s", errdesc);
     acl::string desc;
     desc.format("[%s] %s", g_hostname.c_str(), errdesc);
     memset(errdesc, 0, sizeof(errdesc));
-    strncpy(errdesc, desc.c_str(), ERROR_DESC_SIZE - 1);
+    strncpy(errdesc, desc.c_str(), ERROR_DESC_SIZE - 1); // 放置'\0'
     size_t desclen = strlen(errdesc);
     desclen += desclen != 0;
 
