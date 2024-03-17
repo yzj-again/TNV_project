@@ -1,6 +1,10 @@
 {
   "C_Cpp.errorSquiggles": "disabled",
   "files.associations": {
+    "*.vue": "vue",
+    "*.cjson": "jsonc",
+    "*.wxss": "css",
+    "*.wxs": "javascript",
     "string": "cpp",
     "sstream": "cpp",
     "array": "cpp",
@@ -19,7 +23,8 @@
     "buffer": "cpp",
     "internet": "cpp",
     "socket": "cpp",
-    "timer": "cpp"
+    "timer": "cpp",
+    "atomic": "cpp"
   },
   "C_Cpp_Runner.cCompilerPath": "gcc",
   "C_Cpp_Runner.cppCompilerPath": "g++",
