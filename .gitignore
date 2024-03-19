@@ -1,0 +1,6 @@
+src/**/*.o
+src/**/*.h.gch
+bin/*
+download/
+data/
+upload/
