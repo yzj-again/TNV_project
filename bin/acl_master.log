@@ -1,3 +1,0 @@
-2024/03/19 16:48:01 tracker (pid=8785)(info): log_event_mode(929): use kernel_event
-2024/03/19 16:48:01 tracker (pid=8785)(info): 12_server.cpp(65), proc_on_init: cfg_appids: tnvideo, cfg_maddrs: 127.0.0.1, cfg_raddrs: 127.0.0.1:6379, cfg_interval: 120, cfg_mtimeout: 30, cfg_maxconns: 600, cfg_ctimeout: 10, cfg_rtimeout: 10, cfg_ktimeout: 60
-2024/03/19 16:48:01 tracker (pid=8785)(info): acl_threads_server_main(1650), /home/zijianye/cpp_project/TNV_project/bin/tracker daemon started, log: acl_master.log
