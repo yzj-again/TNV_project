@@ -360,29 +360,32 @@ bool service_c::del(acl::socket_stream *conn, long long bodylen) const
 int service_c::genpath(char *filepath) const
 {
 	// 从存储路径表中随机抽取一个存储路径
+	// ../data3/000/000/000/xxx_000
 	srand(time(NULL));
 	int nspaths = g_spaths.size();
 	int nrand = rand() % nspaths;
 	std::string spath = g_spaths[nrand];
 
 	// 以存储路径为键从ID服务器获取与之对应的值作为文件ID
-	id_c id;
+	id_c id; // 向id服务器发请求
 	long fileid = id.get(spath.c_str());
 	if (fileid < 0)
 		return ERROR;
 
-	// 先将文件ID转换为512进制，再根据它生成文件路径
+	// 先将文件ID转换为512进制，再根据它生成文件路径 /000/000/000/xxx_000
 	return id2path(spath.c_str(), id512(fileid), filepath);
 }
 
 // 将ID转换为512进制
 long service_c::id512(long id) const
 {
+	// aaabbbcccddd
+	// aaa*512^3 + bbb*512^2 + ccc*512^1 + ddd = id
 	long result = 0;
 
 	for (int i = 1; id; i *= 1000)
 	{
-		result += (id % 512) * i;
+		result += (id % 512) * i; // ddd + ccc + ...
 		id /= 512;
 	}
 
@@ -390,8 +393,7 @@ long service_c::id512(long id) const
 }
 
 // 用文件ID生成文件路径
-int service_c::id2path(char const *spath, long fileid,
-											 char *filepath) const
+int service_c::id2path(char const *spath, long fileid, char *filepath) const
 {
 	// 检查存储路径
 	if (!spath || !strlen(spath))
@@ -402,12 +404,12 @@ int service_c::id2path(char const *spath, long fileid,
 
 	// 生成文件路径中的各个分量
 	unsigned short subdir1 = (fileid / 1000000000) % 1000; // 一级子目录
-	unsigned short subdir2 = (fileid / 1000000) % 1000;		 // 二级子目录
+	unsigned short subdir2 = (fileid / 1000000) % 1000;		 // 二级子目录 aaabbb %1000 = bbb
 	unsigned short subdir3 = (fileid / 1000) % 1000;			 // 三级子目录
 	time_t curtime = time(NULL);													 // 当前时间戳
 	unsigned short postfix = (fileid / 1) % 1000;					 // 文件名后缀
 
-	// 格式化完整的文件路径
+	// 格式化完整的文件路径 考虑/data1/ 或/data
 	if (spath[strlen(spath) - 1] == '/')
 		snprintf(filepath, PATH_MAX + 1, "%s%03X/%03X/%03X/%lX_%03X",
 						 spath, subdir1, subdir2, subdir3, curtime, postfix);
@@ -418,7 +420,7 @@ int service_c::id2path(char const *spath, long fileid,
 	return OK;
 }
 
-// 接收并保存文件
+// 接收并保存文件 逐块接收
 int service_c::save(acl::socket_stream *conn, char const *appid,
 										char const *userid, char const *fileid, long long filesize,
 										char const *filepath) const
