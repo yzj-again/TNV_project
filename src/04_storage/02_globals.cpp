@@ -46,4 +46,4 @@ std::vector<std::string> g_raddrs; // Redis地址表
 acl::redis_client_pool *g_rconns;  // Redis连接池
 std::string g_hostname;            // 主机名
 char const *g_version = "1.0";     // 版本
-time_t g_stime;                    // 启动时间
+time_t g_stime;                    // 启动时间 运行时启动
