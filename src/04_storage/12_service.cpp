@@ -477,8 +477,7 @@ int service_c::save(acl::socket_stream *conn, char const *appid,
 }
 
 // 读取并发送文件
-int service_c::send(acl::socket_stream *conn, char const *filepath,
-										long long offset, long long size) const
+int service_c::send(acl::socket_stream *conn, char const *filepath, long long offset, long long size) const
 {
 	file_c file; // 文件操作对象
 
@@ -495,7 +494,7 @@ int service_c::send(acl::socket_stream *conn, char const *filepath,
 
 	// |包体长度|命令|状态|文件内容|
 	// |    8   |  1 |  1 |内容大小|
-	// 构造响应头
+	// 构造响应头 不一定每次都发头
 	long long bodylen = size;
 	long long headlen = HEADLEN;
 	char head[headlen] = {};
@@ -506,8 +505,7 @@ int service_c::send(acl::socket_stream *conn, char const *filepath,
 	// 发送响应头
 	if (conn->write(head, headlen) < 0)
 	{
-		logger_error("write fail: %s, headlen: %lld, to: %s",
-								 acl::last_serror(), headlen, conn->get_peer());
+		logger_error("write fail: %s, headlen: %lld, to: %s", acl::last_serror(), headlen, conn->get_peer());
 		file.close();
 		return SOCKET_ERROR;
 	}
@@ -519,7 +517,7 @@ int service_c::send(acl::socket_stream *conn, char const *filepath,
 	{ // 还有未读取数据
 		// 读取文件
 		long long count = std::min(remain, (long long)sizeof(rdsnd));
-		if (file.read(rdsnd, count) != OK)
+		if (file.read(rdsnd, count) != OK) // 返回OK代表count个字节如实被读到了
 		{
 			file.close();
 			return ERROR;
