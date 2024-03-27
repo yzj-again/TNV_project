@@ -18,7 +18,7 @@ conn_c::conn_c(char const *destaddr, int ctimeout, int rtimeout) : m_ctimeout(ct
 }
 
 // 析构函数
-conn_c::~conn_c(void)
+conn_c::~conn_c()
 {
     // 关闭连接
     close();
@@ -27,6 +27,7 @@ conn_c::~conn_c(void)
 }
 
 // 跟踪服务器
+// 客户端构建请求，接收服务端的响应
 // 从跟踪服务器获取存储服务器地址列表
 int conn_c::saddrs(char const *appid, char const *userid, char const *fileid, std::string &saddrs)
 {
@@ -35,33 +36,33 @@ int conn_c::saddrs(char const *appid, char const *userid, char const *fileid, st
     // 构造请求
     long long bodylen = APPID_SIZE + USERID_SIZE + FILEID_SIZE;
     long long requlen = HEADLEN + bodylen;
-    char requ[requlen];
-    if (makerequ(CMD_TRACKER_SADDRS,
-                 appid, userid, fileid, requ) != OK)
+    // 请求缓存区
+    char requ[requlen] = {};
+    if (makerequ(CMD_TRACKER_SADDRS, appid, userid, fileid, requ) != OK)
         return ERROR;
+    // 填包体长度
     llton(bodylen, requ);
 
+    // 替用户open，检测非空
     if (!open())
         return SOCKET_ERROR;
 
     // 发送请求
     if (m_conn->write(requ, requlen) < 0)
     {
-        logger_error("write fail: %s, requlen: %lld, to: %s",
-                     acl::last_serror(), requlen, m_conn->get_peer());
+        logger_error("write fail: %s, requlen: %lld, to: %s", acl::last_serror(), requlen, m_conn->get_peer());
         m_errnumb = -1;
-        m_errdesc.format("write fail: %s, requlen: %lld, to: %s",
-                         acl::last_serror(), requlen, m_conn->get_peer());
+        m_errdesc.format("write fail: %s, requlen: %lld, to: %s", acl::last_serror(), requlen, m_conn->get_peer());
         close();
         return SOCKET_ERROR;
     }
 
     char *body = NULL; // 包体指针
 
-    // 接收包体
+    // 接收包体 更改指针的值，
     int result = recvbody(&body, &bodylen);
 
-    // 解析包体
+    // 解析包体 saddrs地址列表
     if (result == OK)
         // |包体长度|命令|状态|组名|存储服务器地址列表|
         // |    8   |  1 |  1 |16+1|  包体长度-(16+1) |
@@ -71,6 +72,7 @@ int conn_c::saddrs(char const *appid, char const *userid, char const *fileid, st
         // |包体长度|命令|状态|错误号|错误描述|
         // |    8   |  1 |  1 |   2  | <=1024 |
         m_errnumb = ntos(body);
+        // 假如错误描述是空字符串，body + ERROR_NUMB_SIZE指向位置不对
         m_errdesc = bodylen > ERROR_NUMB_SIZE ? body + ERROR_NUMB_SIZE : "";
     }
 
@@ -87,7 +89,7 @@ int conn_c::saddrs(char const *appid, char const *userid, char const *fileid, st
 // 从跟踪服务器获取组列表
 int conn_c::groups(std::string &groups)
 {
-    // |包体长度|命令|状态|
+    // |包体长度|命令|状态| 没有包体
     // |    8   |  1 |  1 |
     // 构造请求
     long long bodylen = 0;
@@ -97,17 +99,16 @@ int conn_c::groups(std::string &groups)
     requ[BODYLEN_SIZE] = CMD_TRACKER_GROUPS;
     requ[BODYLEN_SIZE + COMMAND_SIZE] = 0;
 
+    // 保证连接
     if (!open())
         return SOCKET_ERROR;
 
     // 发送请求
     if (m_conn->write(requ, requlen) < 0)
     {
-        logger_error("write fail: %s, requlen: %lld, to: %s",
-                     acl::last_serror(), requlen, m_conn->get_peer());
+        logger_error("write fail: %s, requlen: %lld, to: %s", acl::last_serror(), requlen, m_conn->get_peer());
         m_errnumb = -1;
-        m_errdesc.format("write fail: %s, requlen: %lld, to: %s",
-                         acl::last_serror(), requlen, m_conn->get_peer());
+        m_errdesc.format("write fail: %s, requlen: %lld, to: %s", acl::last_serror(), requlen, m_conn->get_peer());
         close();
         return SOCKET_ERROR;
     }
@@ -140,20 +141,21 @@ int conn_c::groups(std::string &groups)
     return result;
 }
 
+// 存储服务器
 // 向存储服务器上传文件
-int conn_c::upload(char const *appid, char const *userid,
-                   char const *fileid, char const *filepath)
+// 文件内容分段发，先发前面的东西
+int conn_c::upload(char const *appid, char const *userid, char const *fileid, char const *filepath)
 {
     // |包体长度|命令|状态|应用ID|用户ID|文件ID|文件大小|文件内容|
-    // |    8   |  1 |  1 |  16  |  256 |  128 |    8   |文件大小|
+    // |    8  |  1 |  1 |  16 | 256  | 128  |  8    |文件大小|
+    // 报文缓冲区不能太大
     // 构造请求
-    long long bodylen = APPID_SIZE + USERID_SIZE + FILEID_SIZE +
-                        BODYLEN_SIZE;
+    long long bodylen = APPID_SIZE + USERID_SIZE + FILEID_SIZE + BODYLEN_SIZE;
     long long requlen = HEADLEN + bodylen;
     char requ[requlen];
-    if (makerequ(CMD_STORAGE_UPLOAD,
-                 appid, userid, fileid, requ) != OK)
+    if (makerequ(CMD_STORAGE_UPLOAD, appid, userid, fileid, requ) != OK)
         return ERROR;
+    // 包体长度和文件大小都没有填
     acl::ifstream ifs;
     if (!ifs.open_read(filepath))
     {
@@ -161,8 +163,8 @@ int conn_c::upload(char const *appid, char const *userid,
         return ERROR;
     }
     long long filesize = ifs.fsize();
-    llton(filesize, requ + HEADLEN +
-                        APPID_SIZE + USERID_SIZE + FILEID_SIZE);
+    llton(filesize, requ + HEADLEN + APPID_SIZE + USERID_SIZE + FILEID_SIZE);
+    // 包体长度包括文件大小
     bodylen += filesize;
     llton(bodylen, requ);
 
@@ -172,11 +174,9 @@ int conn_c::upload(char const *appid, char const *userid,
     // 发送请求
     if (m_conn->write(requ, requlen) < 0)
     {
-        logger_error("write fail: %s, requlen: %lld, to: %s",
-                     acl::last_serror(), requlen, m_conn->get_peer());
+        logger_error("write fail: %s, requlen: %lld, to: %s", acl::last_serror(), requlen, m_conn->get_peer());
         m_errnumb = -1;
-        m_errdesc.format("write fail: %s, requlen: %lld, to: %s",
-                         acl::last_serror(), requlen, m_conn->get_peer());
+        m_errdesc.format("write fail: %s, requlen: %lld, to: %s", acl::last_serror(), requlen, m_conn->get_peer());
         close();
         return SOCKET_ERROR;
     }
@@ -187,19 +187,14 @@ int conn_c::upload(char const *appid, char const *userid,
     while (remain)
     { // 还有未发送数据
         // 发送数据
-        long long bytes = std::min(remain,
-                                   (long long)STORAGE_RCVWR_SIZE);
-        long long count = sendfile(m_conn->sock_handle(),
-                                   ifs.file_handle(), &offset, bytes);
+        long long bytes = std::min(remain, (long long)STORAGE_RCVWR_SIZE);
+        // sendfile返回这一次发送的字节数 套接字文件描述符 文件流的文件描述符 offset会变成下一次偏移位置
+        long long count = sendfile(m_conn->sock_handle(), ifs.file_handle(), &offset, bytes);
         if (count < 0)
         {
-            logger_error(
-                "send file fail, filesize: %lld, remain: %lld",
-                filesize, remain);
+            logger_error("send file fail, filesize: %lld, remain: %lld", filesize, remain);
             m_errnumb = -1;
-            m_errdesc.format(
-                "send file fail, filesize: %lld, remain: %lld",
-                filesize, remain);
+            m_errdesc.format("send file fail, filesize: %lld, remain: %lld", filesize, remain);
             close();
             return SOCKET_ERROR;
         }
@@ -213,7 +208,7 @@ int conn_c::upload(char const *appid, char const *userid,
     // 接收包体
     int result = recvbody(&body, &bodylen);
 
-    // 解析包体
+    // 解析包体 成功包体没有
     if (result == STATUS_ERROR)
     {
         // |包体长度|命令|状态|错误号|错误描述|
@@ -233,22 +228,19 @@ int conn_c::upload(char const *appid, char const *userid,
 }
 
 // 向存储服务器上传文件
-int conn_c::upload(char const *appid, char const *userid,
-                   char const *fileid, char const *filedata, long long filesize)
+int conn_c::upload(char const *appid, char const *userid, char const *fileid, char const *filedata, long long filesize)
 {
     // |包体长度|命令|状态|应用ID|用户ID|文件ID|文件大小|文件内容|
     // |    8   |  1 |  1 |  16  |  256 |  128 |    8   |文件大小|
     // 构造请求
-    long long bodylen = APPID_SIZE + USERID_SIZE + FILEID_SIZE +
-                        BODYLEN_SIZE;
+    long long bodylen = APPID_SIZE + USERID_SIZE + FILEID_SIZE + BODYLEN_SIZE;
     long long requlen = HEADLEN + bodylen;
     char requ[requlen];
-    if (makerequ(CMD_STORAGE_UPLOAD,
-                 appid, userid, fileid, requ) != OK)
+    if (makerequ(CMD_STORAGE_UPLOAD, appid, userid, fileid, requ) != OK)
         return ERROR;
-    llton(filesize, requ + HEADLEN +
-                        APPID_SIZE + USERID_SIZE + FILEID_SIZE);
+    llton(filesize, requ + HEADLEN + APPID_SIZE + USERID_SIZE + FILEID_SIZE);
     bodylen += filesize;
+    // 包体长度
     llton(bodylen, requ);
 
     if (!open())
@@ -257,11 +249,9 @@ int conn_c::upload(char const *appid, char const *userid,
     // 发送请求
     if (m_conn->write(requ, requlen) < 0)
     {
-        logger_error("write fail: %s, requlen: %lld, to: %s",
-                     acl::last_serror(), requlen, m_conn->get_peer());
+        logger_error("write fail: %s, requlen: %lld, to: %s", acl::last_serror(), requlen, m_conn->get_peer());
         m_errnumb = -1;
-        m_errdesc.format("write fail: %s, requlen: %lld, to: %s",
-                         acl::last_serror(), requlen, m_conn->get_peer());
+        m_errdesc.format("write fail: %s, requlen: %lld, to: %s", acl::last_serror(), requlen, m_conn->get_peer());
         close();
         return SOCKET_ERROR;
     }
@@ -269,11 +259,9 @@ int conn_c::upload(char const *appid, char const *userid,
     // 发送文件
     if (m_conn->write(filedata, filesize) < 0)
     {
-        logger_error("write fail: %s, filesize: %lld, to: %s",
-                     acl::last_serror(), filesize, m_conn->get_peer());
+        logger_error("write fail: %s, filesize: %lld, to: %s", acl::last_serror(), filesize, m_conn->get_peer());
         m_errnumb = -1;
-        m_errdesc.format("write fail: %s, filesize: %lld, to: %s",
-                         acl::last_serror(), filesize, m_conn->get_peer());
+        m_errdesc.format("write fail: %s, filesize: %lld, to: %s", acl::last_serror(), filesize, m_conn->get_peer());
         close();
         return SOCKET_ERROR;
     }
@@ -303,8 +291,7 @@ int conn_c::upload(char const *appid, char const *userid,
 }
 
 // 向存储服务器询问文件大小
-int conn_c::filesize(char const *appid, char const *userid,
-                     char const *fileid, long long *filesize)
+int conn_c::filesize(char const *appid, char const *userid, char const *fileid, long long *filesize)
 {
     // |包体长度|命令|状态|应用ID|用户ID|文件ID|
     // |    8   |  1 |  1 |  16  |  256 |  128 |
@@ -312,8 +299,7 @@ int conn_c::filesize(char const *appid, char const *userid,
     long long bodylen = APPID_SIZE + USERID_SIZE + FILEID_SIZE;
     long long requlen = HEADLEN + bodylen;
     char requ[requlen];
-    if (makerequ(CMD_STORAGE_FILESIZE,
-                 appid, userid, fileid, requ) != OK)
+    if (makerequ(CMD_STORAGE_FILESIZE, appid, userid, fileid, requ) != OK)
         return ERROR;
     llton(bodylen, requ);
 
@@ -323,11 +309,9 @@ int conn_c::filesize(char const *appid, char const *userid,
     // 发送请求
     if (m_conn->write(requ, requlen) < 0)
     {
-        logger_error("write fail: %s, requlen: %lld, to: %s",
-                     acl::last_serror(), requlen, m_conn->get_peer());
+        logger_error("write fail: %s, requlen: %lld, to: %s", acl::last_serror(), requlen, m_conn->get_peer());
         m_errnumb = -1;
-        m_errdesc.format("write fail: %s, requlen: %lld, to: %s",
-                         acl::last_serror(), requlen, m_conn->get_peer());
+        m_errdesc.format("write fail: %s, requlen: %lld, to: %s", acl::last_serror(), requlen, m_conn->get_peer());
         close();
         return SOCKET_ERROR;
     }
@@ -340,7 +324,7 @@ int conn_c::filesize(char const *appid, char const *userid,
     // 解析包体
     if (result == OK)
         // |包体长度|命令|状态|文件大小|
-        // |    8   |  1 |  1 |    8   |
+        // |    8  |  1 |  1 |   8   |
         *filesize = ntoll(body);
     else if (result == STATUS_ERROR)
     {
@@ -361,25 +345,19 @@ int conn_c::filesize(char const *appid, char const *userid,
 }
 
 // 从存储服务器下载文件
-int conn_c::download(char const *appid, char const *userid,
-                     char const *fileid, long long offset, long long size,
-                     char **filedata, long long *filesize)
+int conn_c::download(char const *appid, char const *userid, char const *fileid, long long offset, long long size, char **filedata, long long *filesize)
 {
     // |包体长度|命令|状态|应用ID|用户ID|文件ID|偏移|大小|
-    // |    8   |  1 |  1 |  16  |  256 |  128 |  8 |  8 |
+    // |    8  |  1 |  1 |  16 | 256 | 128  |  8 |  8 |
     // 构造请求
-    long long bodylen = APPID_SIZE + USERID_SIZE + FILEID_SIZE +
-                        BODYLEN_SIZE + BODYLEN_SIZE;
+    long long bodylen = APPID_SIZE + USERID_SIZE + FILEID_SIZE + BODYLEN_SIZE + BODYLEN_SIZE;
     long long requlen = HEADLEN + bodylen;
     char requ[requlen];
-    if (makerequ(CMD_STORAGE_DOWNLOAD,
-                 appid, userid, fileid, requ) != OK)
+    if (makerequ(CMD_STORAGE_DOWNLOAD, appid, userid, fileid, requ) != OK)
         return ERROR;
     llton(bodylen, requ);
-    llton(offset, requ + HEADLEN +
-                      APPID_SIZE + USERID_SIZE + FILEID_SIZE);
-    llton(size, requ + HEADLEN +
-                    APPID_SIZE + USERID_SIZE + FILEID_SIZE + BODYLEN_SIZE);
+    llton(offset, requ + HEADLEN + APPID_SIZE + USERID_SIZE + FILEID_SIZE);
+    llton(size, requ + HEADLEN + APPID_SIZE + USERID_SIZE + FILEID_SIZE + BODYLEN_SIZE);
 
     if (!open())
         return SOCKET_ERROR;
@@ -387,11 +365,9 @@ int conn_c::download(char const *appid, char const *userid,
     // 发送请求
     if (m_conn->write(requ, requlen) < 0)
     {
-        logger_error("write fail: %s, requlen: %lld, to: %s",
-                     acl::last_serror(), requlen, m_conn->get_peer());
+        logger_error("write fail: %s, requlen: %lld, to: %s", acl::last_serror(), requlen, m_conn->get_peer());
         m_errnumb = -1;
-        m_errdesc.format("write fail: %s, requlen: %lld, to: %s",
-                         acl::last_serror(), requlen, m_conn->get_peer());
+        m_errdesc.format("write fail: %s, requlen: %lld, to: %s", acl::last_serror(), requlen, m_conn->get_peer());
         close();
         return SOCKET_ERROR;
     }
@@ -405,9 +381,10 @@ int conn_c::download(char const *appid, char const *userid,
     if (result == OK)
     {
         // |包体长度|命令|状态|文件内容|
-        // |    8   |  1 |  1 |内容大小|
+        // |    8  |  1 |  1 |内容大小|
         *filedata = body;
         *filesize = bodylen;
+        // 避免后面释放内存
         return result;
     }
     if (result == STATUS_ERROR)
@@ -429,8 +406,7 @@ int conn_c::download(char const *appid, char const *userid,
 }
 
 // 删除存储服务器上的文件
-int conn_c::del(char const *appid, char const *userid,
-                char const *fileid)
+int conn_c::del(char const *appid, char const *userid, char const *fileid)
 {
     // |包体长度|命令|状态|应用ID|用户ID|文件ID|
     // |    8   |  1 |  1 |  16  |  256 |  128 |
@@ -438,8 +414,7 @@ int conn_c::del(char const *appid, char const *userid,
     long long bodylen = APPID_SIZE + USERID_SIZE + FILEID_SIZE;
     long long requlen = HEADLEN + bodylen;
     char requ[requlen];
-    if (makerequ(CMD_STORAGE_DELETE,
-                 appid, userid, fileid, requ) != OK)
+    if (makerequ(CMD_STORAGE_DELETE, appid, userid, fileid, requ) != OK)
         return ERROR;
     llton(bodylen, requ);
 
@@ -449,11 +424,9 @@ int conn_c::del(char const *appid, char const *userid,
     // 发送请求
     if (m_conn->write(requ, requlen) < 0)
     {
-        logger_error("write fail: %s, requlen: %lld, to: %s",
-                     acl::last_serror(), requlen, m_conn->get_peer());
+        logger_error("write fail: %s, requlen: %lld, to: %s", acl::last_serror(), requlen, m_conn->get_peer());
         m_errnumb = -1;
-        m_errdesc.format("write fail: %s, requlen: %lld, to: %s",
-                         acl::last_serror(), requlen, m_conn->get_peer());
+        m_errdesc.format("write fail: %s, requlen: %lld, to: %s", acl::last_serror(), requlen, m_conn->get_peer());
         close();
         return SOCKET_ERROR;
     }

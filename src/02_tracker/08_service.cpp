@@ -654,6 +654,7 @@ bool service_c::error(acl::socket_stream *conn, short errnumb, char const *forma
     va_start(ap, format);
     vsnprintf(errdesc, ERROR_DESC_SIZE, format, ap);
     va_end(ap); // 释放内存
+    // eg:"This is an error message: %d. This is another error: %d", 123, 456);
     logger_error("%s", errdesc);
     acl::string desc;
     desc.format("[%s] %s", g_hostname.c_str(), errdesc);
