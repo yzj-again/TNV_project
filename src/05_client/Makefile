@@ -7,7 +7,8 @@ LINK   = g++
 AR     = ar rv
 RM     = rm -rf
 CFLAGS = -c -Wall \
-         -I/usr/include/acl-lib/acl -I/usr/include/acl-lib/acl_cpp \
+         -I/usr/include/acl-lib/acl \
+		 -I/usr/include/acl-lib/acl_cpp \
          -I../01_common
 LIBS   = -pthread -lacl_all
 

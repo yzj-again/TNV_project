@@ -104,8 +104,7 @@ int main(int argc, char *argv[])
             char const *userid = argv[4];
             std::string fileid = genfileid(userid);
             char const *filepath = argv[5];
-            if (client.upload(appid, userid,
-                              fileid.c_str(), filepath) != OK)
+            if (client.upload(appid, userid, fileid.c_str(), filepath) != OK)
             {
                 client_c::deinit();
                 return -1;
@@ -150,8 +149,7 @@ int main(int argc, char *argv[])
                     long long size = atoll(argv[7]);
                     char *filedata = NULL;
                     long long filesize = 0;
-                    if (client.download(appid, userid,
-                                        fileid, offset, size, &filedata, &filesize) != OK)
+                    if (client.download(appid, userid, fileid, offset, size, &filedata, &filesize) != OK)
                     {
                         client_c::deinit();
                         return -1;
