@@ -20,7 +20,7 @@ bool service_c::doGet(acl::HttpServletRequest &req, acl::HttpServletResponse &re
 {
     // 从请求中提取资源路径
     acl::string path = req.getPathInfo();
-
+    // 路由比较
     if (!path.ncompare(ROUTE_FILES, strlen(ROUTE_FILES)))
         // 处理文件路由
         files(req, res);
@@ -86,11 +86,12 @@ bool service_c::doOther(acl::HttpServletRequest &req, acl::HttpServletResponse &
 // 处理文件路由
 bool service_c::files(acl::HttpServletRequest &req, acl::HttpServletResponse &res)
 {
-    // 以与请求相同的连接模式回复响应
+    // 以与请求相同的连接模式回复响应 长连接
     res.setKeepAlive(req.isKeepAlive());
 
     // 从请求的资源路径中提取文件ID并检查之
     acl::string path = req.getPathInfo();
+    // /files/
     acl::string fileid = path.right(strlen(ROUTE_FILES) - 1);
     if (!fileid.c_str() || !fileid.size())
     {
@@ -102,11 +103,11 @@ bool service_c::files(acl::HttpServletRequest &req, acl::HttpServletResponse &re
 
     // 设置响应中的内容字段 二进制流
     res.setContentType("application/octet-stream");
-    acl::string filename;
+    acl::string filename; // 附件
     filename.format("attachment;filename=%s", fileid.c_str());
     res.setHeader("content-disposition", filename.c_str());
 
-    client_c client; // 客户机对象
+    client_c client; // 客户机对象 二次开发
 
     // 向存储服务器询问文件大小
     long long filesize = 0;
@@ -126,16 +127,17 @@ bool service_c::files(acl::HttpServletRequest &req, acl::HttpServletResponse &re
     }
     else
     {
+        // 全文下载
         range_from = 0;
         range_to = filesize;
     }
     logger("range: %lld-%lld", range_from, range_to);
 
-    // 从存储服务器下载文件并发送响应 分片
+    // 从存储服务器下载文件并发送响应 分片下载
     long long remain = range_to - range_from;      // 未下载字节数
     long long offset = range_from;                 // 文件偏移位置
     long long size = std::min(remain, FILE_SLICE); // 期望下载大小
-    char *downdata = NULL;                         // 下载数据缓冲
+    char *downdata = NULL;                         // 下载数据缓冲区
     long long downsize = 0;                        // 实际下载大小
     while (remain)
     { // 还有未下载数据
@@ -145,7 +147,7 @@ bool service_c::files(acl::HttpServletRequest &req, acl::HttpServletResponse &re
             res.setStatus(STATUS_INTER_SERVER_ERROR);
             return false;
         }
-        // 发送响应
+        // 发送响应 包体
         res.write(downdata, downsize);
         // 继续下载
         remain -= downsize;

@@ -7,7 +7,7 @@
 //
 // 业务服务类
 //
-// http服务由acl控制
+// http服务由acl控制 处理http业务 ->回调虚函数
 class service_c : public acl::HttpServlet
 {
 public:
@@ -26,7 +26,7 @@ protected:
                  acl::HttpServletResponse &res, char const *method);
 
 private:
-    // 处理文件路由
+    // 处理文件路由，便于区分
     bool files(acl::HttpServletRequest &req,
                acl::HttpServletResponse &res);
 };
